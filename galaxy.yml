@@ -1,0 +1,18 @@
+authors:
+  - Sebastian Yaghoubi <sebastianyaghoubi@gmail.com>
+build_ignore: []
+dependencies:
+  ansible.posix: ">=1.0.0"
+  community.general: ">=1.0.0"
+description: A collection of roles for my homelab
+issues: https://github.com/syaghoubi00/ansible-collection-homelab/issues
+license:
+  - GPL-3.0-or-later
+name: homelab
+namespace: syaghoubi00
+readme: README.md
+repository: https://github.com/syaghoubi00/ansible-collection-homelab
+tags:
+  - infra
+  - homelab
+version: 0.0.0
