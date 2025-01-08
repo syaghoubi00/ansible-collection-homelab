@@ -1,3 +1,0 @@
-[submodule "roles/epel"]
-	path = roles/epel
-	url = https://github.com/syaghoubi00/ansible-role-epel.git
