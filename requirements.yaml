@@ -1,4 +1,0 @@
-roles:
-  - name: epel
-    src: https://github.com/syaghoubi00/ansible-role-epel
-    version: main
