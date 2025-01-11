@@ -1,6 +1,0 @@
-[submodule "roles/epel"]
-	path = roles/epel
-	url = https://github.com/syaghoubi00/ansible-role-epel.git
-[submodule "roles/kea"]
-	path = roles/kea
-	url = https://github.com/syaghoubi00/ansible-role-kea
