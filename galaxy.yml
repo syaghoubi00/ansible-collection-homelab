@@ -15,4 +15,4 @@ repository: https://github.com/syaghoubi00/ansible-collection-homelab
 tags:
   - infra
   - homelab
-version: 1.0.0
+version: 2.0.0
