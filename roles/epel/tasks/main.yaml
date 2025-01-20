@@ -1,0 +1,9 @@
+# TODO: Figure out better naming for major_ver files
+---
+- name: Install dnf config-manager to add repos
+  ansible.builtin.package:
+    name: dnf-plugins-core
+    state: present
+
+- name: Install EPEL
+  ansible.builtin.include_tasks: "{{ ansible_distribution_major_version }}.yaml"

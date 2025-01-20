@@ -1,0 +1,22 @@
+# TODO: Check what RHEL proper reports for ansible_distribution
+# - name: Enable CRB RHSM repository (RHEL)
+#   community.general.rhsm_repository:
+#     name: "codeready-builder-for-rhel-9-{{ ansible_architecture }}-rpms"
+#     state: enabled
+#   when: ansible_distribution == 'RedHat'
+
+- name: Enable CRB repo for CentOS derivatives - (Alma/Rocky/etc)
+  community.general.dnf_config_manager:
+    name: crb
+    state: enabled
+  when: ansible_distribution != 'RedHat'
+
+- name: Add EPEL GPG Key
+  ansible.builtin.rpm_key:
+    key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+    state: present
+
+- name: Install EPEL - (latest)
+  ansible.builtin.dnf:
+    name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+    state: present
