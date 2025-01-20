@@ -1,0 +1,38 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check out your collection repository
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v4
+
+      - name: Build collection
+        if: ${{ steps.release.outputs.release_created }}
+        id: build-collection
+        uses: syaghoubi00/action-build-ansible-collection@v1
+
+      - name: Upload Release Artifact
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ steps.release.outputs.tag_name }} ${{ steps.build-collection.outputs.artifact-filename }}
+
+      - name: Publish Collection to Galaxy
+        if: ${{ steps.release.outputs.release_created }}
+        uses: syaghoubi00/action-publish-ansible-collection@v1
+        with:
+          galaxy-api-key: ${{ secrets.GALAXY_API_KEY }}
+          collection: ${{ steps.build-collection.outputs.artifact-filename }}
