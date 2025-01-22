@@ -53,6 +53,14 @@ options:
     bridge_interface:
         description: Bridge interface name when network=bridge
         type: str
+    wait_for_ip:
+        description: Wait for IP address to be available after starting VM
+        type: bool
+        default: false
+    ip_timeout:
+        description: Maximum time in seconds to wait for IP address
+        type: int
+        default: 300
 notes:
     - Requires QEMU to be installed on the host system
     - Requires appropriate permissions to create and manage VMs
@@ -124,10 +132,18 @@ pid:
     type: int
     returned: when state=started
     sample: 12345
+ip_address:
+    description: IP address of the VM if available
+    type: str
+    returned: when wait_for_ip=true or state=started
+    sample: '192.168.1.100'
 """
 
+import json
 import os
 import subprocess
+import time
+from ipaddress import IPv4Address
 
 from ansible.module_utils._text import to_native
 from ansible.module_utils.basic import AnsibleModule
@@ -150,6 +166,7 @@ class QemuVM:
             "state": "absent",
             "vm_info": None,
             "pid": None,
+            "ip_address": None,
         }
 
     def _run_command(self, command, check_rc=True):
@@ -167,6 +184,90 @@ class QemuVM:
             raise QemuVmError(f"Command failed: {to_native(e.stderr)}")
         except Exception as e:
             raise QemuVmError(f"Error executing command: {to_native(e)}")
+
+    def _get_vm_ip(self):
+        """
+        Get IP address for the VM using multiple methods
+        """
+        # Method 1: Try QEMU Guest Agent
+        try:
+            ga_socket = f"/var/run/qemu-ga/{self.params['name']}.sock"
+            if os.path.exists(ga_socket):
+                result = self._run_command(
+                    ["qemu-ga", "--cmd", "guest-network-get-interfaces", ga_socket],
+                    check_rc=False,
+                )
+                if result.returncode == 0:
+                    data = json.loads(result.stdout)
+                    for iface in data.get("return", []):
+                        for ip in iface.get("ip-addresses", []):
+                            if ip["ip-address-type"] == "ipv4":
+                                try:
+                                    # Validate IP address
+                                    IPv4Address(ip["ip-address"])
+                                    return ip["ip-address"]
+                                except ValueError:
+                                    continue
+        except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
+            pass
+
+        # Method 2: Try ARP table lookup
+        try:
+            # Get VM's MAC address from QEMU process
+            vm_process = self._run_command(["ps", "-ef"], check_rc=False)
+            mac_address = None
+
+            for line in vm_process.stdout.splitlines():
+                if f"-name {self.params['name']}" in line:
+                    # Extract MAC from command line
+                    for part in line.split():
+                        if part.startswith("mac="):
+                            mac_address = part.split("=")[1]
+                            break
+
+            if mac_address:
+                arp_result = self._run_command(["arp", "-n"], check_rc=False)
+                for line in arp_result.stdout.splitlines():
+                    if mac_address.lower() in line.lower():
+                        ip = line.split()[0]
+                        try:
+                            IPv4Address(ip)
+                            return ip
+                        except ValueError:
+                            continue
+        except (subprocess.CalledProcessError, IndexError):
+            pass
+
+        # Method 3: Check QEMU DHCP leases
+        dhcp_lease_file = "/var/lib/qemu/dhcp.leases"
+        if os.path.exists(dhcp_lease_file):
+            try:
+                with open(dhcp_lease_file, "r") as f:
+                    for line in f:
+                        if self.params["name"] in line:
+                            parts = line.split()
+                            for part in parts:
+                                try:
+                                    IPv4Address(part)
+                                    return part
+                                except ValueError:
+                                    continue
+            except (IOError, ValueError):
+                pass
+
+        return None
+
+    def _wait_for_ip(self, timeout=300):
+        """
+        Wait for IP address to become available
+        """
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            ip = self._get_vm_ip()
+            if ip:
+                return ip
+            time.sleep(5)
+        return None
 
     def _get_vm_status(self):
         """Check VM status and get process information"""
@@ -228,14 +329,23 @@ class QemuVM:
         return cmd
 
     def _start_vm(self):
-        """Start the VM"""
+        """Start the VM and optionally wait for IP"""
         cmd = self._build_vm_command()
         self._run_command(cmd)
+
         # Verify VM started successfully
         status, pid = self._get_vm_status()
         if status != "running":
             raise QemuVmError("Failed to start VM")
-        return pid
+
+        # Wait for IP if requested
+        ip_address = None
+        if self.params["wait_for_ip"]:
+            ip_address = self._wait_for_ip(self.params["ip_timeout"])
+            if not ip_address and self.params.get("fail_on_no_ip", False):
+                raise QemuVmError("Failed to obtain IP address within timeout period")
+
+        return pid, ip_address
 
     def _stop_vm(self, pid):
         """Stop the VM gracefully"""
@@ -257,9 +367,13 @@ class QemuVM:
         return True
 
     def _get_vm_info(self):
-        """Get current VM configuration"""
+        """
+        Get current VM configuration including IP address
+        Returns a dictionary with VM details or None if VM doesn't exist
+        """
         if os.path.exists(self.params["image_path"]):
-            return {
+            # Build base VM information dictionary
+            info = {
                 "name": self.params["name"],
                 "memory_mb": self.params["memory_mb"],
                 "vcpus": self.params["vcpus"],
@@ -270,6 +384,18 @@ class QemuVM:
                     "bridge": self.params.get("bridge_interface"),
                 },
             }
+
+            # Get current VM status and pid
+            status, pid = self._get_vm_status()
+            info["status"] = status
+            if pid:
+                info["pid"] = pid
+
+            # Only try to get IP if VM is running
+            if status == "running":
+                info["ip_address"] = self._get_vm_ip()
+
+            return info
         return None
 
     def ensure_state(self):
@@ -277,6 +403,16 @@ class QemuVM:
         current_status, current_pid = self._get_vm_status()
 
         try:
+            if self.params["state"] == "started":
+                if current_status != "running":
+                    pid, ip_address = self._start_vm()
+                    self.result["changed"] = True
+                    self.result["pid"] = pid
+                    self.result["ip_address"] = ip_address
+                elif self.params["wait_for_ip"]:
+                    # VM already running but IP requested
+                    self.result["ip_address"] = self._get_vm_ip()
+
             if self.params["state"] == "absent":
                 if current_status != "absent":
                     if current_status == "running":
@@ -307,6 +443,10 @@ class QemuVM:
             if final_pid:
                 self.result["pid"] = final_pid
 
+            # Always try to get IP for running VMs
+            if final_status == "running" and not self.result["ip_address"]:
+                self.result["ip_address"] = self._get_vm_ip()
+
         except QemuVmError as e:
             self.module.fail_json(msg=str(e))
         except Exception as e:
@@ -330,6 +470,9 @@ def main():
             image_path=dict(type="path", required=True),
             network=dict(type="str", default="user", choices=["user", "bridge"]),
             bridge_interface=dict(type="str"),
+            wait_for_ip=dict(type="bool", default=False),
+            ip_timeout=dict(type="int", default=300),
+            fail_on_no_ip=dict(type="bool", default=False),
         ),
         supports_check_mode=True,
     )
@@ -344,4 +487,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
