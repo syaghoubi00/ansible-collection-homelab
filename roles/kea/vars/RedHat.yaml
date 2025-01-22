@@ -1,0 +1,2 @@
+# NOTE: In some distros there may be multiple packages, may need to change
+kea_package_name: kea # Name of the 'kea' package

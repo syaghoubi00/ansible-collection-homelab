@@ -1,0 +1,12 @@
+- name: Include OS-specific vars
+  ansible.builtin.include_vars: "{{ lookup('ansible.builtin.first_found', params) }}"
+  vars:
+    params:
+      files:
+        - "{{ ansible_distribution }}.yaml"
+        - "{{ ansible_os_family }}.yaml"
+        - default.yaml
+      paths: "vars"
+
+- name: Install Kea
+  ansible.builtin.include_tasks: install.yaml

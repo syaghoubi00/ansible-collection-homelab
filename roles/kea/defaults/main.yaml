@@ -1,0 +1,1 @@
+kea_install_method: package # The install method, currently only package is supported
