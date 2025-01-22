@@ -64,6 +64,10 @@ options:
 notes:
     - Requires QEMU to be installed on the host system
     - Requires appropriate permissions to create and manage VMs
+seealso:
+    - name: QEMU Documentation
+      link: https://www.qemu.org/docs/master/
+      description: Official QEMU documentation
 requirements:
     - python >= 3.6
     - qemu-system-x86_64
@@ -71,25 +75,34 @@ requirements:
 """
 
 EXAMPLES = r"""
-- name: Create a new VM
+# Create multiple VMs and wait for IP addresses
+- name: Create VM cluster
   qemu_vm:
-    name: test-vm
-    state: present
-    memory_mb: 2048
-    vcpus: 2
-    disk_gb: 30
-    image_path: /var/lib/qemu/test-vm.qcow2
-    network: user
-
-- name: Start an existing VM
-  qemu_vm:
-    name: test-vm
+    name: "vm-{{ item }}"
     state: started
+    memory_mb: 4096
+    vcpus: 2
+    disk_gb: 40
+    image_path: "/var/lib/qemu/vm-{{ item }}.qcow2"
+    wait_for_ip: true
+  register: vm_result
+  loop: "{{ range(1, 4) }}"
 
-- name: Remove a VM and its disk image
+# Build a dynamic inventory using the created VMs
+- name: Add hosts to in-memory inventory
+    add_host:
+    name: "{{ item.vm_info.name }}"
+    ansible_host: "{{ item.ip_address }}"
+    groups: qemu_vms
+    loop: "{{ vm_result.results }}"
+    when: item.ip_address is defined
+
+# Remove VMs and cleanup
+- name: Stop VMs
   qemu_vm:
-    name: test-vm
+    name: "{{ item }}"
     state: absent
+  loop: "{{ groups['qemu_vms'] }}"
 """
 
 RETURN = r"""
