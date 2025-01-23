@@ -377,6 +377,17 @@ class QemuVM:
             time.sleep(5)
         return None
 
+    def wait_for_ssh(self, timeout: int = 300, ssh_port: int = 22) -> Optional[str]:
+        """Wait for the SSH port to be reachable"""
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            try:
+                with socket.create_connection((self._get_vm_ip(), ssh_port), timeout=5):
+                    return
+            except (socket.error, socket.timeout):
+                time.sleep(5)
+        return None
+
     def _create_cloud_init_iso(self) -> Optional[Path]:
         """Create cloud-init config drive using cloud-localds if config provided."""
         if not self.params.get("cloud_init"):
