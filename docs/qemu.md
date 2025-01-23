@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `qemu_vm` module manages QEMU virtual machines on a host system.
+The `qemu` module manages QEMU virtual machines on a host system.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ The `qemu_vm` module manages QEMU virtual machines on a host system.
 ```yaml
 # Create a new VM with 2GB RAM and 2 vCPUs
 - name: Create basic VM
-  qemu_vm:
+  qemu:
     name: test-vm
     state: present
     memory_mb: 2048
@@ -25,7 +25,7 @@ The `qemu_vm` module manages QEMU virtual machines on a host system.
 
 # Create multiple VMs and wait for IP addresses
 - name: Create VM cluster
-  qemu_vm:
+  qemu:
     name: "vm-{{ item }}"
     state: started
     memory_mb: 4096
@@ -38,14 +38,14 @@ The `qemu_vm` module manages QEMU virtual machines on a host system.
 
 # Stop all VMs
 - name: Stop VMs
-  qemu_vm:
+  qemu:
     name: "{{ item }}"
     state: stopped
-  loop: "{{ groups['qemu_vms'] }}"
+  loop: "{{ groups['qemus_vms'] }}"
 
 # Remove VM and cleanup
 - name: Remove VM
-  qemu_vm:
+  qemu:
     name: test-vm
     state: absent
 ```
@@ -54,7 +54,7 @@ The `qemu_vm` module manages QEMU virtual machines on a host system.
 
 ```yaml
 - name: Get VM info
-  qemu_vm:
+  qemu:
     name: test-vm
     state: present
   register: vm_result
@@ -76,7 +76,7 @@ The `qemu_vm` module manages QEMU virtual machines on a host system.
   hosts: localhost
   tasks:
     - name: Create and start VM
-      qemu_vm:
+      qemu:
         name: "vm-{{ item }}"
         state: started
         wait_for_ip: true
@@ -100,7 +100,7 @@ The `qemu_vm` module manages QEMU virtual machines on a host system.
   hosts: localhost
   tasks:
     - name: Create and start VM
-      qemu_vm:
+      qemu:
         name: "vm-{{ item }}"
         state: started
         wait_for_ip: true

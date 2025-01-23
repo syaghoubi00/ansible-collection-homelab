@@ -25,7 +25,7 @@ from ansible.module_utils.common.text.converters import to_native
 
 DOCUMENTATION = r"""
 ---
-module: qemu_vm
+module: qemu
 short_description: Manages QEMU virtual machines for testing
 version_added: "1.0.0"
 description:
@@ -103,7 +103,7 @@ author:
 EXAMPLES = r"""
 # Create a test VM using image defaults (no cloud-init)
 - name: Create simple test VM
-  qemu_vm:
+  qemu:
     name: test-vm
     state: started
     image: /templates/ubuntu-22.04.qcow2
@@ -111,7 +111,7 @@ EXAMPLES = r"""
 
 # Create a test VM with bridged networking
 - name: Create bridged network VM
-  qemu_vm:
+  qemu:
     name: test-vm-bridge
     state: started
     image: /templates/ubuntu-22.04.qcow2
@@ -122,7 +122,7 @@ EXAMPLES = r"""
 
 # Create a test VM with cloud-init configuration
 - name: Create customized test VM
-  qemu_vm:
+  qemu:
     name: test-vm-custom
     state: started
     image: /templates/ubuntu-22.04.qcow2
@@ -139,7 +139,7 @@ EXAMPLES = r"""
 
 # Create multiple VMs for parallel testing
 - name: Create test VMs for multiple distros
-  qemu_vm:
+  qemu:
     name: "test-{{ item }}"
     image: "/templates/{{ item }}.qcow2"
     state: started
