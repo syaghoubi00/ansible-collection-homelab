@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/syaghoubi00/ansible-collection-homelab/compare/v1.0.0...v1.1.0) (2025-01-23)
+
+
+### Features
+
+* add kea role to collection ([c5ff695](https://github.com/syaghoubi00/ansible-collection-homelab/commit/c5ff69502c01c3b7ccddb85130d1b0d0ff99f053))
+* add role to install epel ([c51a61e](https://github.com/syaghoubi00/ansible-collection-homelab/commit/c51a61e635446c8ce19af927eacfa88d01ba8c4d))
+
 ## 1.0.0 (2025-01-20)
 
 
