@@ -413,7 +413,7 @@ class QemuVM:
         ]
 
         if cloud_init_iso:
-            cmd.extend(["-drive", f"file={cloud_init_iso},format=raw,readonly=on"])
+            cmd.extend(["-drive", f"file={cloud_init_iso},format=raw,media=cdrom"])
 
         if self.params["network_mode"] == "user":
             ssh_port = self.params.get("ssh_port") or self._find_free_port()
