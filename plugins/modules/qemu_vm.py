@@ -9,10 +9,13 @@ Provides lightweight VM creation for testing Ansible playbooks and roles.
 
 from __future__ import annotations
 
+import json
 import socket
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
+from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, TypedDict
 
@@ -69,9 +72,18 @@ options:
         description: Bridge interface name when network_mode=bridge
         type: str
         required: false
+    wait_for_ip:
+        description: Wait for IP address to be available after starting VM
+        type: bool
+        default: true
+    ip_timeout:
+        description: Maximum time in seconds to wait for IP address
+        type: int
+        default: 300
 notes:
     - Requires QEMU with KVM support
     - Requires cloud-utils package if using cloud-init
+    - When using bridge mode, VM IP detection requires root privileges
 attributes:
     check_mode:
         support: full
@@ -95,6 +107,17 @@ EXAMPLES = r"""
     name: test-vm
     state: started
     image: /templates/ubuntu-22.04.qcow2
+  register: vm
+
+# Create a test VM with bridged networking
+- name: Create bridged network VM
+  qemu_vm:
+    name: test-vm-bridge
+    state: started
+    image: /templates/ubuntu-22.04.qcow2
+    network_mode: bridge
+    bridge_interface: br0
+    wait_for_ip: true
   register: vm
 
 # Create a test VM with cloud-init configuration
@@ -126,12 +149,12 @@ EXAMPLES = r"""
     - debian12
   register: vms
 
-# Add VMs to inventory with dynamic ports
+# Add VMs to inventory with dynamic ports or IPs
 - name: Add to inventory
   add_host:
     name: "{{ item.name }}"
-    ansible_host: localhost
-    ansible_port: "{{ item.ssh_port }}"
+    ansible_host: "{{ item.ip_address | default('localhost') }}"
+    ansible_port: "{{ item.ssh_port | default(22) }}"
     ansible_user: "{{ item.cloud_init.users[0].name | default('ubuntu') }}"
     groups: test_vms
   loop: "{{ vms.results }}"
@@ -149,10 +172,15 @@ state:
     returned: always
     sample: running
 ssh_port:
-    description: Port forwarded to VM's SSH port
+    description: Port forwarded to VM's SSH port (user networking mode only)
     type: int
     returned: when network_mode=user
     sample: 2222
+ip_address:
+    description: IP address of the VM (bridge networking mode)
+    type: str
+    returned: when network_mode=bridge and IP is detected
+    sample: 192.168.1.100
 cloud_init:
     description: Cloud-init configuration used (if any)
     type: dict
@@ -183,6 +211,7 @@ class QemuVmResult:
     state: str = "absent"
     name: str = ""
     ssh_port: Optional[int] = None
+    ip_address: Optional[str] = None
     cloud_init: Optional[Dict[str, Any]] = None
     cmd: Optional[List[str]] = None
     pid: Optional[int] = None
@@ -202,6 +231,8 @@ class QemuVmParams(TypedDict):
     ssh_port: Optional[int]
     network_mode: str
     bridge_interface: Optional[str]
+    wait_for_ip: bool
+    ip_timeout: int
 
 
 class QemuVM:
@@ -224,10 +255,12 @@ class QemuVM:
             except OSError as e:
                 self.module.warn(f"Failed to cleanup {temp_file}: {e}")
 
-    def _run_command(self, command: List[str]) -> subprocess.CompletedProcess:
+    def _run_command(
+        self, command: List[str], check: bool = True
+    ) -> subprocess.CompletedProcess:
         """Execute a command and handle errors."""
         try:
-            return subprocess.run(command, check=True, capture_output=True, text=True)
+            return subprocess.run(command, check=check, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             raise QemuVmError(f"Command failed: {to_native(e.stderr)}")
         except Exception as e:
@@ -238,6 +271,111 @@ class QemuVM:
         with socket.socket() as s:
             s.bind(("", 0))
             return s.getsockname()[1]
+
+    def _get_vm_mac(self) -> Optional[str]:
+        """Extract MAC address from QEMU process command line."""
+        try:
+            result = self._run_command(["ps", "-ef"], check=False)
+            for line in result.stdout.splitlines():
+                if f"-name {self.params['name']}" in line:
+                    # Look for MAC in netdev/device arguments
+                    parts = line.split()
+                    for i, part in enumerate(parts):
+                        if "virtio-net" in part and i + 1 < len(parts):
+                            mac_part = parts[i + 1]
+                            if "mac=" in mac_part:
+                                return mac_part.split("=")[1].strip(",")
+            return None
+        except (QemuVmError, IndexError):
+            return None
+
+    def _get_vm_ip_from_arp(self, mac: Optional[str] = None) -> Optional[str]:
+        """Get VM IP address from ARP table."""
+        if not mac:
+            mac = self._get_vm_mac()
+        if not mac:
+            return None
+
+        try:
+            result = self._run_command(["arp", "-n"], check=False)
+            for line in result.stdout.splitlines():
+                if mac.lower() in line.lower():
+                    ip = line.split()[0]
+                    try:
+                        IPv4Address(ip)
+                        return ip
+                    except ValueError:
+                        continue
+        except QemuVmError:
+            pass
+        return None
+
+    def _get_vm_ip_from_guest_agent(self) -> Optional[str]:
+        """Get VM IP address using QEMU Guest Agent."""
+        try:
+            ga_socket = f"/var/run/qemu-ga/{self.params['name']}.sock"
+            if Path(ga_socket).exists():
+                result = self._run_command(
+                    ["qemu-ga", "--cmd", "guest-network-get-interfaces", ga_socket],
+                    check=False,
+                )
+                if result.returncode == 0:
+                    data = json.loads(result.stdout)
+                    for iface in data.get("return", []):
+                        for ip in iface.get("ip-addresses", []):
+                            if ip["ip-address-type"] == "ipv4":
+                                try:
+                                    IPv4Address(ip["ip-address"])
+                                    return ip["ip-address"]
+                                except ValueError:
+                                    continue
+        except (QemuVmError, json.JSONDecodeError, FileNotFoundError):
+            pass
+        return None
+
+    def _get_vm_ip_from_dhcp_leases(self) -> Optional[str]:
+        """Get VM IP address from QEMU DHCP lease file."""
+        lease_file = Path("/var/lib/qemu/dhcp.leases")
+        if lease_file.exists():
+            try:
+                content = lease_file.read_text()
+                for line in content.splitlines():
+                    if self.params["name"] in line:
+                        parts = line.split()
+                        for part in parts:
+                            try:
+                                IPv4Address(part)
+                                return part
+                            except ValueError:
+                                continue
+            except (IOError, ValueError):
+                pass
+        return None
+
+    def _get_vm_ip(self) -> Optional[str]:
+        """Get VM IP address using all available methods."""
+        # Try guest agent first
+        ip = self._get_vm_ip_from_guest_agent()
+        if ip:
+            return ip
+
+        # Try ARP table lookup
+        ip = self._get_vm_ip_from_arp()
+        if ip:
+            return ip
+
+        # Try DHCP leases as last resort
+        return self._get_vm_ip_from_dhcp_leases()
+
+    def _wait_for_ip(self, timeout: int = 300) -> Optional[str]:
+        """Wait for IP address to become available."""
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            ip = self._get_vm_ip()
+            if ip:
+                return ip
+            time.sleep(5)
+        return None
 
     def _create_cloud_init_iso(self) -> Optional[Path]:
         """Create cloud-init config drive using cloud-localds if config provided."""
@@ -332,16 +470,31 @@ class QemuVM:
                     self.result.cmd = cmd
                     self.result.changed = True
 
+                    # Wait for IP if requested and using bridge networking
+                    if (
+                        self.params["network_mode"] == "bridge"
+                        and self.params["wait_for_ip"]
+                    ):
+                        self.result.ip_address = self._wait_for_ip(
+                            self.params["ip_timeout"]
+                        )
+
             elif self.params["state"] == "stopped":
                 if current_pid:
                     self._run_command(["kill", str(current_pid)])
                     self.result.changed = True
 
-            # Update final state
+            # Update final state and info
             final_pid = self._get_vm_pid()
             self.result.state = "running" if final_pid else "stopped"
             if final_pid:
                 self.result.pid = final_pid
+                # Always try to get IP for bridge mode when running
+                if (
+                    self.params["network_mode"] == "bridge"
+                    and not self.result.ip_address
+                ):
+                    self.result.ip_address = self._get_vm_ip()
 
         except QemuVmError as e:
             self.module.fail_json(msg=str(e))
@@ -366,6 +519,8 @@ def main() -> None:
             ssh_port=dict(type="int", required=False),
             network_mode=dict(type="str", choices=["user", "bridge"], default="user"),
             bridge_interface=dict(type="str", required=False),
+            wait_for_ip=dict(type="bool", default=True),
+            ip_timeout=dict(type="int", default=300),
         ),
         required_if=[("network_mode", "bridge", ["bridge_interface"])],
         supports_check_mode=True,
