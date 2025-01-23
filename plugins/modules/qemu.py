@@ -40,8 +40,8 @@ options:
         type: str
     state:
         description: Desired state of the VM
-        choices: ['present', 'absent', 'started', 'stopped']
-        default: present
+        choices: ['started', 'stopped']
+        default: started
         type: str
     memory_mb:
         description: Memory size in MB
@@ -457,12 +457,7 @@ class QemuVM:
         current_pid = self._get_vm_pid()
 
         try:
-            if self.params["state"] == "absent":
-                if current_pid:
-                    self._run_command(["kill", str(current_pid)])
-                    self.result.changed = True
-
-            elif self.params["state"] in ["present", "started"]:
+            if self.params["state"] == "started":
                 if not current_pid:
                     cloud_init_iso = self._create_cloud_init_iso()
                     cmd = self._build_vm_command(cloud_init_iso)
@@ -509,8 +504,8 @@ def main() -> None:
             name=dict(type="str", required=True),
             state=dict(
                 type="str",
-                default="present",
-                choices=["present", "absent", "started", "stopped"],
+                default="started",
+                choices=["started", "stopped"],
             ),
             memory_mb=dict(type="int", default=2048),
             vcpus=dict(type="int", default=2),
