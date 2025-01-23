@@ -440,7 +440,7 @@ class QemuVM:
                 ]
             )
 
-        cmd.extend(["-enable-kvm", "-nographic", "-daemonize"])
+        cmd.extend(["-enable-kvm", "-display", "none", "-daemonize"])
 
         return cmd
 
