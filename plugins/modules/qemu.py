@@ -78,7 +78,7 @@ class Qemu:
         deadline = time.time() + timeout
 
         while time.time() < deadline:
-            # PERF: Running the loop without try/except
+            # PERF: PERF203: Running the loop without try/except
             # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             #     sock.settimeout(5)
             #     result = sock.connect_ex((ip_addr, ssh_port))
