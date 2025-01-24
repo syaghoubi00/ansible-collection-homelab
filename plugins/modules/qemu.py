@@ -109,3 +109,7 @@ def main() -> None:
     )
 
     Qemu(module)
+
+
+if __name__ == "__main__":
+    main()
