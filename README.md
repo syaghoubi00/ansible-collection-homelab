@@ -1,3 +1,25 @@
 # Ansible Collection - syaghoubi00.homelab
 
-A collection of my Ansible roles for my homelab, to easier resolve role dependencies
+An Ansible collection of things I use for my homelab
+
+## Roles
+
+### epel
+
+Installs EPEL for EL systems
+
+**Supported Platforms**:
+
+- EL9
+
+### kea
+
+Installs the Kea DHCP server
+
+**Supported Platforms**:
+
+- EL9
+
+## Plugins
+
+### Modules
