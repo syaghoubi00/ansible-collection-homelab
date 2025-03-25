@@ -26,7 +26,7 @@ None.
     docker_rootless_mode: true
     docker_user: "rootless_docker"
   roles:
-    - syaghoubi00.docker
+    - syaghoubi00.homelab.docker
 ```
 
 ## License
