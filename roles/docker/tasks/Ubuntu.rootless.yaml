@@ -1,0 +1,52 @@
+- name: Install prerequisites for rootless Docker
+  ansible.builtin.package:
+    name:
+      - dbus-user-session
+      - uidmap
+      - systemd-container # Needed for machinectl become_method
+      - slirp4netns # For rootless networking
+      # - iptables # Docker is incompatible with nftables - https://docs.docker.com/engine/install/ubuntu/#firewall-limitations
+      - docker-ce-rootless-extras
+      - acl # Needed for Ansible temp files
+      - polkitd # Needed for non-interactive machinectl auth
+    state: present
+
+# TODO: Make idempotent - systemd linger file?
+- name: Enable lingering
+  # ansible.builtin.command:
+  #   cmd: "loginctl enable-linger {{ docker_user }}"
+  ansible.builtin.file:
+    dest: /var/lib/systemd/linger/{{ docker_user }}"
+    state: touch
+    mode: "0644"
+
+- name: Add polkit rule for machinectl non-interactive auth
+  ansible.builtin.copy:
+    dest: /etc/polkit-1/rules.d/60-machinectl-fast-user-auth.rules
+    content: |
+      polkit.addRule(function(action, subject) {
+        if(action.id == "org.freedesktop.machine1.host-shell" &&
+          subject.isInGroup("wheel")) {
+            return polkit.Result.YES;
+        }
+      });
+    mode: "0644"
+
+# TODO: Make idempotent - check whether rootless context is configured?
+- name: Run rootless install script
+  become: true
+  become_method: community.general.machinectl # Uses machinectl to get proper XDG variables in env
+  become_user: "{{ docker_user }}"
+  ansible.builtin.command:
+    cmd: /usr/bin/dockerd-rootless-setuptool.sh install
+  vars:
+    ansible_ssh_pipelining: false # Disable pipelining, as a TTY (machinectl) over SSH is unsupported
+
+- name: Enable rootless Docker service
+  become: true
+  become_user: "{{ docker_user }}"
+  ansible.builtin.systemd:
+    name: docker.service
+    state: started
+    enabled: true
+    scope: user

@@ -1,0 +1,12 @@
+dependencies: []
+galaxy_info:
+  author: syaghoubi00
+  description: Install Docker
+  galaxy_tags:
+    - docker
+    - containers
+    - infra
+    - ops
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.1"
+  role_name: docker

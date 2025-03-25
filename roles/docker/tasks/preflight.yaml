@@ -1,0 +1,40 @@
+- name: Define the Docker supported architectures and distributions
+  ansible.builtin.set_fact:
+    # NOTE: Docker also seems to supports armhf, but not sure if thats picked up by ansible?
+    docker_supported_architectures:
+      - x86_64
+      - aarch64
+      - ppc64le
+    docker_supported_distributions:
+      Debian:
+        - 12
+        - 13
+      Ubuntu:
+        - "24.10"
+        - "24.04"
+        - "22.04"
+        - "20.04"
+      Fedora:
+        - 40
+        - 41
+    # NOTE: EL variants need special handling for major version compatibility,
+    # since ansible_distribution_version reports the major.minor version
+    docker_supported_el:
+      AlmaLinux:
+        - 9
+
+- name: Check architecture
+  ansible.builtin.fail:
+    msg: "This system's architecture isn't supported by Docker: {{ ansible_architecture }}"
+  when: ansible_architecture not in docker_supported_architectures
+
+- name: Check distribution and release
+  ansible.builtin.fail:
+    msg: "This release of {{ ansible_distribution }} isn't supported by Docker: {{ ansible_lsb.codename }}"
+  when: ansible_distribution not in docker_supported_el and
+    ansible_distribution_version not in docker_supported_distributions[ansible_distribution]
+
+- name: Check EL major version
+  ansible.builtin.fail:
+    msg: "This release of {{ ansible_distribution }} isn't supported by Docker: {{ ansible_distribution_major_version }}"
+  when: ansible_distribution in docker_supported_el and ansible_distribution_major_version not in docker_supported_el[ansible_distribution]

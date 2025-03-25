@@ -1,0 +1,30 @@
+- name: Install Docker engine
+  ansible.builtin.package:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Set Docker to use local storage driver instead of json
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "local"
+      }
+    mode: "0644"
+
+- name: Enable Docker systemd service
+  ansible.builtin.systemd_service:
+    name: docker.service
+    state: started
+    enabled: true
+
+- name: Enable containerd systemd service
+  ansible.builtin.systemd_service:
+    name: containerd.service
+    state: started
+    enabled: true

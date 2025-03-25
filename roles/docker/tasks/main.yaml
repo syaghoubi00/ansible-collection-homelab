@@ -1,0 +1,27 @@
+# TODO: Add test to run container to verify function
+---
+- name: Verify target meets the requriements
+  ansible.builtin.include_tasks: preflight.yaml
+
+# TODO: Only fetch when ansible_packages is false
+- name: Feth the packages installed on the system
+  ansible.builtin.package_facts:
+    manager: auto
+  when:
+    # - not ansible_facts.packages
+    - ansible_facts.packages is undefined
+
+- name: Prep system for rootful Docker
+  ansible.builtin.include_tasks: "{{ ansible_os_family }}.rootful.yaml"
+  when: "'docker-ce' not in ansible_facts.packages"
+
+- name: Install rootful Docker
+  ansible.builtin.include_tasks: common.rootful.yaml
+
+- name: Prep system for rootless Docker
+  ansible.builtin.include_tasks: "common.rootless.yaml"
+  when: docker_rootless_mode | bool
+
+- name: Make Docker rootless
+  ansible.builtin.include_tasks: "{{ ansible_distribution }}.rootless.yaml"
+  when: docker_rootless_mode | bool

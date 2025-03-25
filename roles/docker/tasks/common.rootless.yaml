@@ -1,0 +1,22 @@
+- name: Disable system-wide Docker daemon
+  ansible.builtin.systemd:
+    service: docker.service
+    state: stopped
+    enabled: false
+
+- name: Remove system-wide Docker socket
+  ansible.builtin.file:
+    state: absent
+    path: /var/run/docker.sock
+
+# NOTE: Added to the 'users' group by default - create seperate group?
+- name: Add Docker user
+  ansible.builtin.user:
+    user: "{{ docker_user }}"
+    shell: /bin/bash
+    state: present
+
+- name: Add ssh authorized key to Docker user
+  ansible.posix.authorized_key:
+    user: "{{ docker_user }}"
+    key: "{{ docker_ssh_public_key }}"
