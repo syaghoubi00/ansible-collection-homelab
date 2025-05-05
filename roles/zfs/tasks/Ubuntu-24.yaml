@@ -1,0 +1,11 @@
+- name: Enable Universe Repo for ZFS
+  become: true
+  ansible.builtin.apt_repository:
+    repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_lsb.codename }} main universe"
+    state: present
+    filename: universe
+
+- name: Install ZFS
+  become: true
+  ansible.builtin.package:
+    name: zfsutils-linux

@@ -1,0 +1,14 @@
+# HACK: Set EL distros to group them all as RedHat
+# - otherwise would need separate files for every derivative
+- name: Define OS distributions
+  ansible.builtin.set_fact:
+    el_distros:
+      - AlmaLinux
+
+- name: Install ZFS
+  ansible.builtin.include_tasks: "{{ ansible_distribution }}-{{ ansible_distribution_major_version }}.yaml"
+  when: ansible_distribution not in el_distros
+
+- name: Install ZFS - (EL)
+  ansible.builtin.include_tasks: "{{ ansible_os_family }}-{{ ansible_distribution_major_version }}.yaml"
+  when: ansible_distribution in el_distros

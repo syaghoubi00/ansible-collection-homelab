@@ -1,0 +1,41 @@
+# TODO: Check if repo is installed before calling the role
+- name: Add EPEL
+  ansible.builtin.include_role: syaghoubi00.homelab.epel
+
+- name: Add ZFS Repo GPG Key
+  become: true
+  ansible.builtin.rpm_key:
+    key: https://raw.githubusercontent.com/zfsonlinux/zfsonlinux.github.com/master/zfs-release/RPM-GPG-KEY-openzfs-key2
+    fingerprint: 7DC7 299D CF7C 7FD9 CD87 701B A599 FD5E 9DB8 4141
+    state: present
+
+- name: Add ZFS Repo for EL9
+  ansible.builtin.dnf:
+    name: https://zfsonlinux.org/epel/zfs-release-2-3.el9.noarch.rpm
+    state: present
+
+- name: Install ZFS for EL9 - DKMS
+  ansible.builtin.dnf:
+    name:
+      - kernel-devel
+      - zfs
+    state: present
+  when: zfs_kabi is undefined
+
+- name: Install ZFS for EL9 - kABI
+  when: zfs_kabi
+  block:
+    - name: Disable zfs-dkms
+      community.general.dnf_config_manager:
+        name: zfs
+        state: disabled
+
+    - name: Enable zfs-kmod
+      community.general.dnf_config_manager:
+        name: zfs-kmod
+        state: enabled
+
+    - name: Install zfs-kmod
+      ansible.builtin.package:
+        name: zfs
+        state: present
