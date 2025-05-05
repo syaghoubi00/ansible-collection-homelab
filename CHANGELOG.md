@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.0](https://github.com/syaghoubi00/ansible-collection-homelab/compare/v1.0.0...v1.1.0) (2025-05-05)
+
+
+### Features
+
+* add kea role to collection ([c5ff695](https://github.com/syaghoubi00/ansible-collection-homelab/commit/c5ff69502c01c3b7ccddb85130d1b0d0ff99f053))
+* add role to install epel ([c51a61e](https://github.com/syaghoubi00/ansible-collection-homelab/commit/c51a61e635446c8ce19af927eacfa88d01ba8c4d))
+* **role.docker:** move docker role to collection ([1834d2c](https://github.com/syaghoubi00/ansible-collection-homelab/commit/1834d2c6cb97941837662127c3ecb9aacbcb8806))
+* **roles.zfs:** migrate zfs role to collection ([947279b](https://github.com/syaghoubi00/ansible-collection-homelab/commit/947279bed4fecae88209c193b0e1610038421ac0))
+
 ## 1.0.0 (2025-01-20)
 
 
